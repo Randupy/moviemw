@@ -96,49 +96,69 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const magnet = urlParams.get('magnet');
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const magnet = urlParams.get('magnet');
+        
+        // Список специальных трекеров для браузерного стриминга
+        const opts = {
+            announce: [
+                'wss://tracker.btorrent.xyz',
+                'wss://tracker.openwebtorrent.com',
+                'wss://tracker.fastcast.nz',
+                'wss://tracker.webtorrent.dev'
+            ]
+        };
+
         const client = new WebTorrent();
 
         if (magnet) {
-            client.add(magnet, function (torrent) {
-                // Ищем первый подходящий видеофайл
+            // Добавляем опции с веб-трекерами
+            client.add(magnet, opts, function (torrent) {
+                console.log('Торрент добавлен:', torrent.infoHash);
+
                 const file = torrent.files.find(f => {
                     return f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm');
                 });
 
                 if (file) {
-                    document.getElementById('status-text').innerText = 'Загружаем буфер...';
-
-                    // Обновление статистики (скорость, прогресс)
+                    document.getElementById('status-text').innerText = 'Сиды найдены! Начинаем буферизацию...';
+                    
                     torrent.on('download', () => {
                         const progress = (torrent.progress * 100).toFixed(1);
                         const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(1);
-                        document.getElementById('stats').innerText =
-                            `Прогресс: ${progress}% | Скорость: ${speed} MB/s`;
+                        const peers = torrent.numPeers;
+                        document.getElementById('stats').innerText = 
+                            `Пиры: ${peers} | Прогресс: ${progress}% | Скорость: ${speed} MB/s`;
                     });
 
-                    // Рендерим видео в контейнер
+                    // Рендерим видео
                     file.appendTo('#player-container', {
                         autoplay: true,
                         muted: false,
                         controls: true
                     });
 
-                    // Когда видео готово к показу
-                    setTimeout(() => {
-                        document.getElementById('status-container').style.display = 'none';
-                        document.getElementById('player-container').style.display = 'block';
-                    }, 2000);
-
+                    // Скрываем загрузку при первом появлении кадров
+                    file.getBuffer((err, buffer) => {
+                        if (!err) {
+                            document.getElementById('status-container').style.display = 'none';
+                            document.getElementById('player-container').style.display = 'block';
+                        }
+                    });
+                    
                 } else {
-                    document.getElementById('status-text').innerText = 'Ошибка: Видеофайл не найден в раздаче.';
+                    document.getElementById('status-text').innerText = 'Видеофайл не найден в раздаче.';
                 }
             });
 
             client.on('error', (err) => {
-                document.getElementById('status-text').innerText = 'Ошибка сети: ' + err.message;
+                console.error('WebTorrent Error:', err);
+                document.getElementById('status-text').innerText = 'Ошибка: ' + err.message;
             });
-        } else {
-            document.getElementById('status-text').innerText = 'Магнит-ссылка отсутствует.';
         }
     </script>
 </body>
