@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+    <title>Stream Player</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+    <style>
+        :root {
+            --tg-theme-bg: #1c1c1d;
+            --tg-theme-text: #ffffff;
+            --tg-theme-hint: #8e8e93;
+            --tg-theme-button: #248bf2;
+        }
+
+        body {
+            background-color: #000;
+            color: var(--tg-theme-text);
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        #status-container {
+            text-align: center;
+            padding: 20px;
+            z-index: 10;
+        }
+
+        .loader {
+            width: 48px;
+            height: 48px;
+            border: 5px solid #FFF;
+            border-bottom-color: var(--tg-theme-button);
+            border-radius: 50%;
+            display: inline-block;
+            box-sizing: border-box;
+            animation: rotation 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes rotation {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        #player-container {
+            width: 100%;
+            height: 100%;
+            display: none;
+            background: #000;
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+
+        .info-text {
+            color: var(--tg-theme-hint);
+            font-size: 14px;
+            margin-top: 8px;
+        }
+
+        .movie-title {
+            font-weight: 600;
+            font-size: 18px;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="status-container">
+        <div class="loader" id="main-loader"></div>
+        <div class="movie-title" id="display-name">Подготовка стрима...</div>
+        <div class="info-text" id="status-text">Ищем активных раздающих...</div>
+        <div id="stats" style="font-size: 12px; color: #555; margin-top: 10px;"></div>
+    </div>
+
+    <div id="player-container">
+        </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на всё окно
+        tg.ready();
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const magnet = urlParams.get('magnet');
+        const client = new WebTorrent();
+
+        if (magnet) {
+            client.add(magnet, function (torrent) {
+                // Ищем первый подходящий видеофайл
+                const file = torrent.files.find(f => {
+                    return f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm');
+                });
+
+                if (file) {
+                    document.getElementById('status-text').innerText = 'Загружаем буфер...';
+
+                    // Обновление статистики (скорость, прогресс)
+                    torrent.on('download', () => {
+                        const progress = (torrent.progress * 100).toFixed(1);
+                        const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(1);
+                        document.getElementById('stats').innerText =
+                            `Прогресс: ${progress}% | Скорость: ${speed} MB/s`;
+                    });
+
+                    // Рендерим видео в контейнер
+                    file.appendTo('#player-container', {
+                        autoplay: true,
+                        muted: false,
+                        controls: true
+                    });
+
+                    // Когда видео готово к показу
+                    setTimeout(() => {
+                        document.getElementById('status-container').style.display = 'none';
+                        document.getElementById('player-container').style.display = 'block';
+                    }, 2000);
+
+                } else {
+                    document.getElementById('status-text').innerText = 'Ошибка: Видеофайл не найден в раздаче.';
+                }
+            });
+
+            client.on('error', (err) => {
+                document.getElementById('status-text').innerText = 'Ошибка сети: ' + err.message;
+            });
+        } else {
+            document.getElementById('status-text').innerText = 'Магнит-ссылка отсутствует.';
+        }
+    </script>
+</body>
+</html>
