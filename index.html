@@ -41,11 +41,13 @@
         const statusText = document.getElementById('status-text');
         const urlParams = new URLSearchParams(window.location.search);
 
-        // Получаем магнит и декодируем его дважды для страховки от "кривых" символов
+        // --- ЛОГИКА ДЛЯ TORRSERVE (ПРЯМОЙ СТРИМ) ---
+        const streamUrl = urlParams.get('stream');
+
+        // --- ЛОГИКА ДЛЯ WEBTORRENT (МАГНИТ) ---
         const rawMagnet = urlParams.get('magnet');
         const magnet = rawMagnet ? decodeURIComponent(decodeURIComponent(rawMagnet)) : null;
 
-        // Список трекеров-посредников для браузера
         const announceList = [
             'wss://tracker.btorrent.xyz',
             'wss://tracker.openwebtorrent.com',
@@ -54,7 +56,6 @@
             'wss://tracker.files.fm:7073/announce'
         ];
 
-        // STUN серверы помогают WebRTC пробиться через NAT/VPN
         const rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
@@ -67,27 +68,34 @@
             ]
         };
 
-        // 2. Передаем настройки ПРИ СОЗДАНИИ клиента
         const client = new WebTorrent({
-            tracker: {
-                rtcConfig: rtcConfig
-            }
+            tracker: { rtcConfig: rtcConfig }
         });
 
-        if (magnet) {
-            console.log("Плеер запускает магнит:", magnet); // Чтобы видеть чистую ссылку в консоли
-            statusText.innerText = "Установка связи с пирами (WebRTC)...";
-
-            // Опции для добавления торрента
-            const clientOptions = {
-                announce: announceList,
-                rtcConfig: rtcConfig
+        // 1. ПРИОРЕТЕТ: Если есть ссылка на стрим (TorrServe)
+        if (streamUrl) {
+            const decodedStream = decodeURIComponent(streamUrl);
+            console.log("Запуск стрима через TorrServe:", decodedStream);
+            statusText.innerText = "Подключение к видео-потоку...";
+            
+            const video = document.getElementById('video-player');
+            video.src = decodedStream;
+            
+            video.oncanplay = () => {
+                document.getElementById('status-container').style.display = 'none';
+                document.getElementById('player-container').style.display = 'block';
             };
 
-            client.add(magnet, clientOptions, function (torrent) {
-                console.log('Torrent ready:', torrent.infoHash);
+            video.onerror = () => {
+                document.getElementById('error-log').innerText = "Ошибка загрузки потока. Проверьте, запущен ли TorrServe на ПК.";
+            };
 
-                // Ищем видео файл
+        // 2. ЗАПАСНОЙ ВАРИАНТ: Если есть только магнит
+        } else if (magnet) {
+            console.log("Запуск WebTorrent магнита:", magnet);
+            statusText.innerText = "Установка связи с пирами (WebRTC)...";
+
+            client.add(magnet, { announce: announceList, rtcConfig: rtcConfig }, function (torrent) {
                 const file = torrent.files.find(f => f.name.match(/\.(mp4|mkv|webm|avi)$/i));
 
                 if (file) {
@@ -95,20 +103,13 @@
                         if (err) document.getElementById('error-log').innerText = "Ошибка плеера: " + err.message;
                     });
 
-                    // Обновление интерфейса раз в секунду
                     setInterval(() => {
                         document.getElementById('peers-count').innerText = torrent.numPeers;
                         document.getElementById('download-speed').innerText = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
                         document.getElementById('progress-percent').innerText = (torrent.progress * 100).toFixed(1);
-
-                        if (torrent.numPeers > 0) {
-                            statusText.innerText = "Загрузка видео...";
-                        } else {
-                            statusText.innerText = "Ожидание пиров (Web)...";
-                        }
+                        statusText.innerText = torrent.numPeers > 0 ? "Загрузка видео..." : "Ожидание пиров (Web)...";
                     }, 1000);
 
-                    // Если пошли данные (хотя бы чуть-чуть) — показываем плеер
                     torrent.on('download', () => {
                         if (torrent.progress > 0.0001) {
                             document.getElementById('status-container').style.display = 'none';
@@ -121,11 +122,10 @@
             });
 
             client.on('error', err => {
-                console.error('WebTorrent Error:', err);
                 document.getElementById('error-log').innerText = "Ошибка WebTorrent: " + err.message;
             });
         } else {
-            statusText.innerText = "❌ Нет ссылки на фильм";
+            statusText.innerText = "❌ Ссылка не получена";
         }
     </script>
 </body>
