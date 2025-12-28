@@ -1,24 +1,112 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <title>Stream Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
     <style>
-        body { margin: 0; background: #000; display: flex; align-items: center; height: 100vh; }
-        video { width: 100%; height: auto; max-height: 100vh; }
+        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        #status-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        .loader { width: 40px; height: 40px; border: 4px solid #333; border-top-color: #248bf2; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #player-container { width: 100%; display: none; background: #000; position: relative; }
+        video { width: 100%; max-height: 80vh; }
+        #stats { margin-top: 15px; font-size: 13px; color: #aaa; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; min-width: 200px; }
+        .controls { display: flex; justify-content: center; gap: 20px; padding: 20px; background: #111; }
+        button { background: #248bf2; border: none; color: #fff; padding: 10px 20px; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
-    <video id="player" controls autoplay></video>
+
+    <div id="status-container">
+        <div class="loader"></div>
+        <h3 id="movie-name">Загрузка торрента...</h3>
+        <div id="status-text">Устанавливаем соединение с пирами...</div>
+        <div id="stats">Подключение к трекерам...</div>
+    </div>
+
+    <div id="player-container">
+        <div id="video-target"></div>
+        <div class="controls">
+            <button onclick="skip(-10)">-10с</button>
+            <button id="playBtn" onclick="togglePlay()">Пауза</button>
+            <button onclick="skip(10)">+10с</button>
+        </div>
+    </div>
+
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+
         const urlParams = new URLSearchParams(window.location.search);
-        const videoUrl = urlParams.get('video');
-        if (videoUrl) {
-            document.getElementById('player').src = decodeURIComponent(videoUrl);
+        const magnet = urlParams.get('magnet');
+        const statsEl = document.getElementById('stats');
+        const statusText = document.getElementById('status-text');
+
+        const client = new WebTorrent();
+
+        // Список "мостов" между обычными торрентами и браузером
+        const announceList = [
+            'wss://tracker.btorrent.xyz',
+            'wss://tracker.openwebtorrent.com',
+            'wss://tracker.fastcast.nz',
+            'wss://tracker.webtorrent.dev',
+            'wss://tracker.files.fm:7073/announce'
+        ];
+
+        if (magnet) {
+            // Добавляем трекеры к магниту, если их там нет
+            const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+            const fullMagnet = magnet.includes('&tr=') ? magnet : magnet + trackerParams;
+
+            client.add(fullMagnet, function (torrent) {
+                console.log('Info hash:', torrent.infoHash);
+
+                // Ищем видеофайл
+                const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm'));
+
+                if (file) {
+                    // Отрисовка видео
+                    file.appendTo('#video-target', { autoplay: true, controls: true });
+
+                    // Обновление статистики каждую секунду
+                    setInterval(() => {
+                        const speed = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
+                        const progress = (torrent.progress * 100).toFixed(1);
+                        statsEl.innerHTML = `
+                            👥 Пиры (Web): ${torrent.numPeers}<br>
+                            🚀 Скорость: ${speed} МБ/с<br>
+                            📊 Прогресс: ${progress}%
+                        `;
+
+                        // Если появились пиры и пошла загрузка
+                        if (torrent.numPeers > 0 && torrent.downloadSpeed > 0) {
+                            statusText.innerText = "Загрузка началась...";
+                        }
+                    }, 1000);
+
+                    // Переключение экрана при наличии данных
+                    torrent.on('download', () => {
+                        if (torrent.progress > 0.001) {
+                            document.getElementById('status-container').style.display = 'none';
+                            document.getElementById('player-container').style.display = 'block';
+                        }
+                    });
+                }
+            });
+        }
+
+        // Управление видео
+        function togglePlay() {
+            const v = document.querySelector('video');
+            if (v.paused) { v.play(); document.getElementById('playBtn').innerText = "Пауза"; }
+            else { v.pause(); document.getElementById('playBtn').innerText = "Пуск"; }
+        }
+        function skip(time) {
+            const v = document.querySelector('video');
+            v.currentTime += time;
         }
     </script>
 </body>
