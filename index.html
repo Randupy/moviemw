@@ -40,11 +40,11 @@
 
         const statusText = document.getElementById('status-text');
         const urlParams = new URLSearchParams(window.location.search);
-        
+
         // Получаем магнит и декодируем его
         const rawMagnet = urlParams.get('magnet');
         const magnet = rawMagnet ? decodeURIComponent(rawMagnet) : null;
-        
+
         const client = new WebTorrent();
 
         // Список трекеров-посредников для браузера
@@ -57,11 +57,22 @@
         ];
 
         // STUN серверы помогают WebRTC пробиться через NAT/VPN
+        // Обновленные настройки для пробития любых блокировок
         const rtcConfig = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
+                // Добавляем публичный TURN сервер (relay)
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
             ]
         };
 
