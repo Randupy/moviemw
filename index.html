@@ -44,8 +44,7 @@
         // Получаем магнит и декодируем его
         const rawMagnet = urlParams.get('magnet');
         const magnet = rawMagnet ? decodeURIComponent(rawMagnet) : null;
-
-        const client = new WebTorrent();
+        
 
         // Список трекеров-посредников для браузера
         const announceList = [
@@ -58,23 +57,25 @@
 
         // STUN серверы помогают WebRTC пробиться через NAT/VPN
         // Обновленные настройки для пробития любых блокировок
-        const rtcConfig = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                // Добавляем публичный TURN сервер (relay)
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ]
-        };
+        // 1. Сначала создаем конфиг
+const rtcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+        }
+    ]
+};
+
+// 2. Передаем его ПРИ СОЗДАНИИ клиента
+const client = new WebTorrent({
+    tracker: {
+        rtcConfig: rtcConfig // Обязательно здесь!
+    }
+});
 
         if (magnet) {
             statusText.innerText = "Установка связи с пирами (WebRTC)...";
