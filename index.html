@@ -2,163 +2,93 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-    <title>Stream Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultimate Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
     <style>
-        :root {
-            --tg-theme-bg: #1c1c1d;
-            --tg-theme-text: #ffffff;
-            --tg-theme-hint: #8e8e93;
-            --tg-theme-button: #248bf2;
-        }
-
-        body {
-            background-color: #000;
-            color: var(--tg-theme-text);
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            overflow: hidden;
-        }
-
-        #status-container {
-            text-align: center;
-            padding: 20px;
-            z-index: 10;
-        }
-
-        .loader {
-            width: 48px;
-            height: 48px;
-            border: 5px solid #FFF;
-            border-bottom-color: var(--tg-theme-button);
-            border-radius: 50%;
-            display: inline-block;
-            box-sizing: border-box;
-            animation: rotation 1s linear infinite;
-            margin-bottom: 15px;
-        }
-
-        @keyframes rotation {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        #player-container {
-            width: 100%;
-            height: 100%;
-            display: none;
-            background: #000;
-        }
-
-        video {
-            width: 100%;
-            height: 100%;
-            outline: none;
-        }
-
-        .info-text {
-            color: var(--tg-theme-hint);
-            font-size: 14px;
-            margin-top: 8px;
-        }
-
-        .movie-title {
-            font-weight: 600;
-            font-size: 18px;
-            margin-bottom: 5px;
-        }
+        body { background: #000; color: #fff; margin: 0; font-family: sans-serif; height: 100vh; display: flex; flex-direction: column; }
+        #status-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
+        .loader { width: 40px; height: 40px; border: 4px solid #333; border-top-color: #248bf2; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #player-container { width: 100%; display: none; background: #000; position: relative; }
+        video { width: 100%; max-height: 80vh; }
+        #stats { margin-top: 15px; font-size: 13px; color: #aaa; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 10px; min-width: 200px; }
+        .controls { display: flex; justify-content: center; gap: 20px; padding: 20px; background: #111; }
+        button { background: #248bf2; border: none; color: #fff; padding: 10px 20px; border-radius: 8px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="status-container">
-        <div class="loader" id="main-loader"></div>
-        <div class="movie-title" id="display-name">Подготовка стрима...</div>
-        <div class="info-text" id="status-text">Ищем активных раздающих...</div>
-        <div id="stats" style="font-size: 12px; color: #555; margin-top: 10px;"></div>
+        <div class="loader"></div>
+        <h3 id="movie-name">Загрузка торрента...</h3>
+        <div id="status-text">Устанавливаем соединение с пирами...</div>
+        <div id="stats">Подключение к трекерам...</div>
     </div>
 
     <div id="player-container">
+        <div id="video-target"></div>
+        <div class="controls">
+            <button onclick="skip(-10)">-10с</button>
+            <button id="playBtn" onclick="togglePlay()">Пауза</button>
+            <button onclick="skip(10)">+10с</button>
         </div>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на всё окно
-        tg.ready();
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const magnet = urlParams.get('magnet');
-        const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.ready();
 
         const urlParams = new URLSearchParams(window.location.search);
         const magnet = urlParams.get('magnet');
-
-        // Список специальных трекеров для браузерного стриминга
-        const opts = {
-            announce: [
-                'wss://tracker.btorrent.xyz',
-                'wss://tracker.openwebtorrent.com',
-                'wss://tracker.fastcast.nz',
-                'wss://tracker.webtorrent.dev'
-            ]
-        };
+        const statsEl = document.getElementById('stats');
+        const statusText = document.getElementById('status-text');
 
         const client = new WebTorrent();
 
         if (magnet) {
-            // Добавляем опции с веб-трекерами
-            client.add(magnet, opts, function (torrent) {
-                console.log('Торрент добавлен:', torrent.infoHash);
+            client.add(magnet, function (torrent) {
+                const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.mkv'));
+                
+                // Функция обновления инфо на экране
+                const updateStats = () => {
+                    const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(2);
+                    statsEl.innerHTML = `
+                        👥 Пиры: ${torrent.numPeers}<br>
+                        🚀 Скорость: ${speed} МБ/с<br>
+                        📊 Прогресс: ${(torrent.progress * 100).toFixed(1)}%
+                    `;
+                    if (torrent.numPeers > 0 && torrent.progress === 0) {
+                        statusText.innerText = "Пиры найдены! Получаем данные...";
+                    }
+                };
 
-                const file = torrent.files.find(f => {
-                    return f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm');
-                });
+                setInterval(updateStats, 1000);
 
                 if (file) {
-                    document.getElementById('status-text').innerText = 'Сиды найдены! Начинаем буферизацию...';
-
+                    file.appendTo('#video-target', { autoplay: true, controls: true });
+                    
+                    // Как только пошло скачивание, ждем немного и показываем плеер
                     torrent.on('download', () => {
-                        const progress = (torrent.progress * 100).toFixed(1);
-                        const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(1);
-                        const peers = torrent.numPeers;
-                        document.getElementById('stats').innerText =
-                            `Пиры: ${peers} | Прогресс: ${progress}% | Скорость: ${speed} MB/s`;
-                    });
-
-                    // Рендерим видео
-                    file.appendTo('#player-container', {
-                        autoplay: true,
-                        muted: false,
-                        controls: true
-                    });
-
-                    // Скрываем загрузку при первом появлении кадров
-                    file.getBuffer((err, buffer) => {
-                        if (!err) {
+                        if (torrent.progress > 0.001) { // Если скачано хотя бы чуть-чуть
                             document.getElementById('status-container').style.display = 'none';
                             document.getElementById('player-container').style.display = 'block';
                         }
                     });
-
-                } else {
-                    document.getElementById('status-text').innerText = 'Видеофайл не найден в раздаче.';
                 }
             });
+        }
 
-            client.on('error', (err) => {
-                console.error('WebTorrent Error:', err);
-                document.getElementById('status-text').innerText = 'Ошибка: ' + err.message;
-            });
+        // Управление видео
+        function togglePlay() {
+            const v = document.querySelector('video');
+            if (v.paused) { v.play(); document.getElementById('playBtn').innerText = "Пауза"; }
+            else { v.pause(); document.getElementById('playBtn').innerText = "Пуск"; }
+        }
+        function skip(time) {
+            const v = document.querySelector('video');
+            v.currentTime += time;
         }
     </script>
 </body>
