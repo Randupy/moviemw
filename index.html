@@ -38,40 +38,46 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
+        const statusText = document.getElementById('status-text');
         const urlParams = new URLSearchParams(window.location.search);
-        const magnet = urlParams.get('magnet');
+        
+        // Получаем магнит и декодируем его
+        const rawMagnet = urlParams.get('magnet');
+        const magnet = rawMagnet ? decodeURIComponent(rawMagnet) : null;
+        
         const client = new WebTorrent();
 
-// Список трекеров-посредников для браузера
-const announceList = [
-    'wss://tracker.btorrent.xyz',
-    'wss://tracker.openwebtorrent.com',
-    'wss://tracker.webtorrent.dev',
-    'wss://tracker.fastcast.nz',
-    'wss://tracker.files.fm:7073/announce',
-    'ws://tracker.files.fm:7072/announce'
-];
+        // Список трекеров-посредников для браузера
+        const announceList = [
+            'wss://tracker.btorrent.xyz',
+            'wss://tracker.openwebtorrent.com',
+            'wss://tracker.webtorrent.dev',
+            'wss://tracker.fastcast.nz',
+            'wss://tracker.files.fm:7073/announce'
+        ];
 
-// STUN серверы помогают WebRTC пробиться через NAT/VPN
-const rtcConfig = {
-    iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' }
-    ]
-};
+        // STUN серверы помогают WebRTC пробиться через NAT/VPN
+        const rtcConfig = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' }
+            ]
+        };
 
-if (magnet) {
-    statusText.innerText = "Установка связи с пирами (WebRTC)...";
+        if (magnet) {
+            statusText.innerText = "Установка связи с пирами (WebRTC)...";
 
-            // Склеиваем магнит и веб-трекеры
-            const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
-            const fullMagnet = magnet + trackerParams;
+            // Чтобы не дублировать трекеры, добавляем их только если их нет в магните
+            const clientOptions = {
+                announce: announceList,
+                rtcConfig: rtcConfig
+            };
 
-            client.add(fullMagnet, function (torrent) {
+            client.add(magnet, clientOptions, function (torrent) {
                 console.log('Torrent ready:', torrent.infoHash);
 
-                // Ищем видео
+                // Ищем видео файл
                 const file = torrent.files.find(f => f.name.match(/\.(mp4|mkv|webm|avi)$/i));
 
                 if (file) {
@@ -79,36 +85,37 @@ if (magnet) {
                         if (err) document.getElementById('error-log').innerText = "Ошибка плеера: " + err.message;
                     });
 
-                    // Обновление интерфейса
+                    // Обновление интерфейса раз в секунду
                     setInterval(() => {
                         document.getElementById('peers-count').innerText = torrent.numPeers;
                         document.getElementById('download-speed').innerText = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
                         document.getElementById('progress-percent').innerText = (torrent.progress * 100).toFixed(1);
 
                         if (torrent.numPeers > 0) {
-                            document.getElementById('status-text').innerText = "Загрузка видео...";
+                            statusText.innerText = "Загрузка видео...";
                         } else {
-                            document.getElementById('status-text').innerText = "Ожидание пиров...";
+                            statusText.innerText = "Ожидание пиров (Web)...";
                         }
                     }, 1000);
 
-                    // Если пошли данные — показываем плеер
+                    // Если пошли данные (хотя бы чуть-чуть) — показываем плеер
                     torrent.on('download', () => {
-                        if (torrent.progress > 0.001) {
+                        if (torrent.progress > 0.0001) {
                             document.getElementById('status-container').style.display = 'none';
                             document.getElementById('player-container').style.display = 'block';
                         }
                     });
                 } else {
-                    document.getElementById('status-text').innerText = "❌ Видео не найдено в торренте";
+                    statusText.innerText = "❌ Видео не найдено в торренте";
                 }
             });
 
             client.on('error', err => {
+                console.error('WebTorrent Error:', err);
                 document.getElementById('error-log').innerText = "Ошибка WebTorrent: " + err.message;
             });
         } else {
-            document.getElementById('status-text').innerText = "❌ Нет ссылки на фильм";
+            statusText.innerText = "❌ Нет ссылки на фильм";
         }
     </script>
 </body>
