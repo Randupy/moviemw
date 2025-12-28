@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Lampa Player</title>
+    <meta name="referrer" content="no-referrer-when-downgrade">
+    <title>Kodik Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
@@ -11,8 +12,7 @@
     </style>
 </head>
 <body>
-    <div id="player-container" style="width: 100%; height: 100vh;">
-        </div>
+    <div id="player-container" style="width: 100%; height: 100vh;"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
@@ -25,15 +25,15 @@
             const decodedUrl = decodeURIComponent(streamUrl);
             const container = document.getElementById('player-container');
             
-            // Создаем iframe, который откроет агрегатор видео
             const iframe = document.createElement('iframe');
             iframe.src = decodedUrl;
+            // Добавляем атрибуты для корректной работы плеера
             iframe.allow = "autoplay; fullscreen; encrypted-media";
             iframe.allowFullscreen = true;
             
             container.appendChild(iframe);
         } else {
-            document.body.innerHTML = "<h2 style='color:white; text-align:center;'>Ссылка не найдена</h2>";
+            document.body.innerHTML = "<h2 style='color:white; text-align:center; padding-top:50px;'>Напишите название фильма боту</h2>";
         }
     </script>
 </body>
