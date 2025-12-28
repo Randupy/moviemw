@@ -42,17 +42,27 @@
         const magnet = urlParams.get('magnet');
         const client = new WebTorrent();
 
-        // Веб-трекеры для связи с браузерами
-        const announceList = [
-            'wss://tracker.btorrent.xyz',
-            'wss://tracker.openwebtorrent.com',
-            'wss://tracker.fastcast.nz',
-            'wss://tracker.webtorrent.dev',
-            'wss://tracker.files.fm:7073/announce'
-        ];
+// Список трекеров-посредников для браузера
+const announceList = [
+    'wss://tracker.btorrent.xyz',
+    'wss://tracker.openwebtorrent.com',
+    'wss://tracker.webtorrent.dev',
+    'wss://tracker.fastcast.nz',
+    'wss://tracker.files.fm:7073/announce',
+    'ws://tracker.files.fm:7072/announce'
+];
 
-        if (magnet) {
-            document.getElementById('status-text').innerText = "Подключение к сети...";
+// STUN серверы помогают WebRTC пробиться через NAT/VPN
+const rtcConfig = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' }
+    ]
+};
+
+if (magnet) {
+    statusText.innerText = "Установка связи с пирами (WebRTC)...";
 
             // Склеиваем магнит и веб-трекеры
             const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
