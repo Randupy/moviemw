@@ -37,77 +37,116 @@
     </div>
 
     <script>
-        const tg = window.Telegram.WebApp;
-        tg.expand();
+    const tg = window.Telegram.WebApp;
+    tg.expand();
 
-        const urlParams = new URLSearchParams(window.location.search);
-        const magnet = urlParams.get('magnet');
-        const statsEl = document.getElementById('stats');
-        const statusText = document.getElementById('status-text');
+    const urlParams = new URLSearchParams(window.location.search);
+    const magnet = urlParams.get('magnet');
+    const statsEl = document.getElementById('stats');
+    const statusText = document.getElementById('status-text');
 
-        const client = new WebTorrent();
+    const client = new WebTorrent();
 
-        // Список "мостов" между обычными торрентами и браузером
-        const announceList = [
-            'wss://tracker.btorrent.xyz',
-            'wss://tracker.openwebtorrent.com',
-            'wss://tracker.fastcast.nz',
-            'wss://tracker.webtorrent.dev',
-            'wss://tracker.files.fm:7073/announce'
-        ];
+    // Список "мостов" между обычными торрентами и браузером (WebRTC трекеры)
+    const announceList = [
+        'wss://tracker.btorrent.xyz',
+        'wss://tracker.openwebtorrent.com',
+        'wss://tracker.fastcast.nz',
+        'wss://tracker.webtorrent.dev',
+        'wss://tracker.files.fm:7073/announce'
+    ];
 
-        if (magnet) {
-            // Добавляем трекеры к магниту, если их там нет
-            const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
-            const fullMagnet = magnet.includes('&tr=') ? magnet : magnet + trackerParams;
+    if (magnet) {
+        // Добавляем трекеры к магниту для поддержки браузерного стриминга
+        const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+        const fullMagnet = magnet + trackerParams;
 
-            client.add(fullMagnet, function (torrent) {
-                console.log('Info hash:', torrent.infoHash);
+        statusText.innerText = "Подключение к пирам...";
 
-                // Ищем видеофайл
-                const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm'));
+        client.add(fullMagnet, function (torrent) {
+            console.log('Info hash:', torrent.infoHash);
 
-                if (file) {
-                    // Отрисовка видео
-                    file.appendTo('#video-target', { autoplay: true, controls: true });
+            // Ищем видеофайл (mp4, mkv, webm, avi)
+            const file = torrent.files.find(f =>
+                f.name.endsWith('.mp4') ||
+                f.name.endsWith('.mkv') ||
+                f.name.endsWith('.webm') ||
+                f.name.endsWith('.avi')
+            );
 
-                    // Обновление статистики каждую секунду
-                    setInterval(() => {
-                        const speed = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
-                        const progress = (torrent.progress * 100).toFixed(1);
-                        statsEl.innerHTML = `
-                            👥 Пиры (Web): ${torrent.numPeers}<br>
-                            🚀 Скорость: ${speed} МБ/с<br>
-                            📊 Прогресс: ${progress}%
-                        `;
+            if (file) {
+                // Стримим файл в элемент с id "video-target"
+                file.appendTo('#video-target', {
+                    autoplay: true,
+                    controls: true,
+                    muted: false
+                });
 
-                        // Если появились пиры и пошла загрузка
-                        if (torrent.numPeers > 0 && torrent.downloadSpeed > 0) {
-                            statusText.innerText = "Загрузка началась...";
+                // Таймер для проверки наличия пиров
+                setTimeout(() => {
+                    if (torrent.numPeers === 0) {
+                        statusText.innerHTML = "⚠️ Нет доступных Web-пиров.<br><small>Попробуйте другой торрент или подождите</small>";
+                    }
+                }, 10000);
+
+                // Обновление статистики каждую секунду
+                setInterval(() => {
+                    const speed = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
+                    const progress = (torrent.progress * 100).toFixed(1);
+
+                    statsEl.innerHTML = `
+                        👥 Пиры (Web): ${torrent.numPeers}<br>
+                        🚀 Скорость: ${speed} МБ/с<br>
+                        📊 Прогресс: ${progress}%
+                    `;
+
+                    if (torrent.numPeers > 0) {
+                        if (torrent.downloadSpeed > 0) {
+                            statusText.innerText = "Загрузка данных...";
+                        } else {
+                            statusText.innerText = "Поиск видео-блоков...";
                         }
-                    }, 1000);
+                    }
+                }, 1000);
 
-                    // Переключение экрана при наличии данных
-                    torrent.on('download', () => {
-                        if (torrent.progress > 0.001) {
-                            document.getElementById('status-container').style.display = 'none';
-                            document.getElementById('player-container').style.display = 'block';
-                        }
-                    });
-                }
-            });
-        }
+                // Переключение экрана, когда загружено достаточно для старта
+                torrent.on('download', () => {
+                    if (torrent.progress > 0.0001) {
+                        document.getElementById('status-container').style.display = 'none';
+                        document.getElementById('player-container').style.display = 'block';
+                    }
+                });
+            } else {
+                statusText.innerText = "❌ Видеофайл не найден внутри торрента";
+            }
+        });
 
-        // Управление видео
-        function togglePlay() {
-            const v = document.querySelector('video');
-            if (v.paused) { v.play(); document.getElementById('playBtn').innerText = "Пауза"; }
-            else { v.pause(); document.getElementById('playBtn').innerText = "Пуск"; }
+        // Обработка критических ошибок клиента
+        client.on('error', function (err) {
+            console.error('WebTorrent Error:', err.message);
+            statusText.innerText = "Ошибка: " + err.message;
+        });
+    } else {
+        statusText.innerText = "❌ Магнит-ссылка не получена";
+    }
+
+    // Управление видео
+    function togglePlay() {
+        const v = document.querySelector('video');
+        if (!v) return;
+        if (v.paused) {
+            v.play();
+            document.getElementById('playBtn').innerText = "Пауза";
+        } else {
+            v.pause();
+            document.getElementById('playBtn').innerText = "Пуск";
         }
-        function skip(time) {
-            const v = document.querySelector('video');
-            v.currentTime += time;
-        }
-    </script>
+    }
+
+    function skip(time) {
+        const v = document.querySelector('video');
+        if (v) v.currentTime += time;
+    }
+</script>
 </body>
 </html>
