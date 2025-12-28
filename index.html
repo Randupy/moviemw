@@ -102,7 +102,7 @@
 
         const urlParams = new URLSearchParams(window.location.search);
         const magnet = urlParams.get('magnet');
-        
+
         // Список специальных трекеров для браузерного стриминга
         const opts = {
             announce: [
@@ -126,12 +126,12 @@
 
                 if (file) {
                     document.getElementById('status-text').innerText = 'Сиды найдены! Начинаем буферизацию...';
-                    
+
                     torrent.on('download', () => {
                         const progress = (torrent.progress * 100).toFixed(1);
                         const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(1);
                         const peers = torrent.numPeers;
-                        document.getElementById('stats').innerText = 
+                        document.getElementById('stats').innerText =
                             `Пиры: ${peers} | Прогресс: ${progress}% | Скорость: ${speed} MB/s`;
                     });
 
@@ -149,7 +149,7 @@
                             document.getElementById('player-container').style.display = 'block';
                         }
                     });
-                    
+
                 } else {
                     document.getElementById('status-text').innerText = 'Видеофайл не найден в раздаче.';
                 }
