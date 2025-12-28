@@ -3,129 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Movie App Player</title>
+    <title>Lampa Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
     <style>
-        body { background: #0e0e0e; color: #fff; margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        #status-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; }
-        .loader { width: 50px; height: 50px; border: 5px solid #333; border-top-color: #0088cc; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        #stats { background: rgba(255,255,255,0.05); padding: 15px; border-radius: 12px; margin-top: 20px; font-size: 14px; line-height: 1.6; min-width: 200px; }
-        #player-container { width: 100%; display: none; background: #000; }
-        video { width: 100%; height: 100vh; background: #000; }
-        .error-text { color: #ff4d4d; font-size: 14px; margin-top: 10px; }
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; overflow: hidden; }
+        iframe { width: 100%; height: 100%; border: none; }
     </style>
 </head>
 <body>
-
-    <div id="status-container">
-        <div class="loader"></div>
-        <div id="status-text" style="font-weight: bold; font-size: 18px;">Инициализация...</div>
-        <div id="stats">
-            👥 Пиры: <span id="peers-count">0</span><br>
-            🚀 Скорость: <span id="download-speed">0</span> МБ/с<br>
-            📊 Прогресс: <span id="progress-percent">0</span>%
+    <div id="player-container" style="width: 100%; height: 100vh;">
         </div>
-        <div id="error-log" class="error-text"></div>
-    </div>
-
-    <div id="player-container">
-        <video id="video-player" controls playsinline autoplay></video>
-    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        const statusText = document.getElementById('status-text');
         const urlParams = new URLSearchParams(window.location.search);
-
-        // --- ЛОГИКА ДЛЯ TORRSERVE (ПРЯМОЙ СТРИМ) ---
         const streamUrl = urlParams.get('stream');
 
-        // --- ЛОГИКА ДЛЯ WEBTORRENT (МАГНИТ) ---
-        const rawMagnet = urlParams.get('magnet');
-        const magnet = rawMagnet ? decodeURIComponent(decodeURIComponent(rawMagnet)) : null;
-
-        const announceList = [
-            'wss://tracker.btorrent.xyz',
-            'wss://tracker.openwebtorrent.com',
-            'wss://tracker.webtorrent.dev',
-            'wss://tracker.fastcast.nz',
-            'wss://tracker.files.fm:7073/announce'
-        ];
-
-        const rtcConfig = {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ]
-        };
-
-        const client = new WebTorrent({
-            tracker: { rtcConfig: rtcConfig }
-        });
-
-        // 1. ПРИОРЕТЕТ: Если есть ссылка на стрим (TorrServe)
         if (streamUrl) {
-            const decodedStream = decodeURIComponent(streamUrl);
-            console.log("Запуск стрима через TorrServe:", decodedStream);
-            statusText.innerText = "Подключение к видео-потоку...";
+            const decodedUrl = decodeURIComponent(streamUrl);
+            const container = document.getElementById('player-container');
             
-            const video = document.getElementById('video-player');
-            video.src = decodedStream;
+            // Создаем iframe, который откроет агрегатор видео
+            const iframe = document.createElement('iframe');
+            iframe.src = decodedUrl;
+            iframe.allow = "autoplay; fullscreen; encrypted-media";
+            iframe.allowFullscreen = true;
             
-            video.oncanplay = () => {
-                document.getElementById('status-container').style.display = 'none';
-                document.getElementById('player-container').style.display = 'block';
-            };
-
-            video.onerror = () => {
-                document.getElementById('error-log').innerText = "Ошибка загрузки потока. Проверьте, запущен ли TorrServe на ПК.";
-            };
-
-        // 2. ЗАПАСНОЙ ВАРИАНТ: Если есть только магнит
-        } else if (magnet) {
-            console.log("Запуск WebTorrent магнита:", magnet);
-            statusText.innerText = "Установка связи с пирами (WebRTC)...";
-
-            client.add(magnet, { announce: announceList, rtcConfig: rtcConfig }, function (torrent) {
-                const file = torrent.files.find(f => f.name.match(/\.(mp4|mkv|webm|avi)$/i));
-
-                if (file) {
-                    file.renderTo('#video-player', (err, elem) => {
-                        if (err) document.getElementById('error-log').innerText = "Ошибка плеера: " + err.message;
-                    });
-
-                    setInterval(() => {
-                        document.getElementById('peers-count').innerText = torrent.numPeers;
-                        document.getElementById('download-speed').innerText = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
-                        document.getElementById('progress-percent').innerText = (torrent.progress * 100).toFixed(1);
-                        statusText.innerText = torrent.numPeers > 0 ? "Загрузка видео..." : "Ожидание пиров (Web)...";
-                    }, 1000);
-
-                    torrent.on('download', () => {
-                        if (torrent.progress > 0.0001) {
-                            document.getElementById('status-container').style.display = 'none';
-                            document.getElementById('player-container').style.display = 'block';
-                        }
-                    });
-                } else {
-                    statusText.innerText = "❌ Видео не найдено в торренте";
-                }
-            });
-
-            client.on('error', err => {
-                document.getElementById('error-log').innerText = "Ошибка WebTorrent: " + err.message;
-            });
+            container.appendChild(iframe);
         } else {
-            statusText.innerText = "❌ Ссылка не получена";
+            document.body.innerHTML = "<h2 style='color:white; text-align:center;'>Ссылка не найдена</h2>";
         }
     </script>
 </body>
