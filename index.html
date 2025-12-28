@@ -47,31 +47,49 @@
 
         const client = new WebTorrent();
 
-        if (magnet) {
-            client.add(magnet, function (torrent) {
-                const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.mkv'));
-                
-                // Функция обновления инфо на экране
-                const updateStats = () => {
-                    const speed = (torrent.downloadSpeed / 1024 / 1024).toFixed(2);
-                    statsEl.innerHTML = `
-                        👥 Пиры: ${torrent.numPeers}<br>
-                        🚀 Скорость: ${speed} МБ/с<br>
-                        📊 Прогресс: ${(torrent.progress * 100).toFixed(1)}%
-                    `;
-                    if (torrent.numPeers > 0 && torrent.progress === 0) {
-                        statusText.innerText = "Пиры найдены! Получаем данные...";
-                    }
-                };
+        // Список "мостов" между обычными торрентами и браузером
+        const announceList = [
+            'wss://tracker.btorrent.xyz',
+            'wss://tracker.openwebtorrent.com',
+            'wss://tracker.fastcast.nz',
+            'wss://tracker.webtorrent.dev',
+            'wss://tracker.files.fm:7073/announce'
+        ];
 
-                setInterval(updateStats, 1000);
+        if (magnet) {
+            // Добавляем трекеры к магниту, если их там нет
+            const trackerParams = announceList.map(t => `&tr=${encodeURIComponent(t)}`).join('');
+            const fullMagnet = magnet.includes('&tr=') ? magnet : magnet + trackerParams;
+
+            client.add(fullMagnet, function (torrent) {
+                console.log('Info hash:', torrent.infoHash);
+
+                // Ищем видеофайл
+                const file = torrent.files.find(f => f.name.endsWith('.mp4') || f.name.endsWith('.mkv') || f.name.endsWith('.webm'));
 
                 if (file) {
+                    // Отрисовка видео
                     file.appendTo('#video-target', { autoplay: true, controls: true });
-                    
-                    // Как только пошло скачивание, ждем немного и показываем плеер
+
+                    // Обновление статистики каждую секунду
+                    setInterval(() => {
+                        const speed = (torrent.downloadSpeed / (1024 * 1024)).toFixed(2);
+                        const progress = (torrent.progress * 100).toFixed(1);
+                        statsEl.innerHTML = `
+                            👥 Пиры (Web): ${torrent.numPeers}<br>
+                            🚀 Скорость: ${speed} МБ/с<br>
+                            📊 Прогресс: ${progress}%
+                        `;
+
+                        // Если появились пиры и пошла загрузка
+                        if (torrent.numPeers > 0 && torrent.downloadSpeed > 0) {
+                            statusText.innerText = "Загрузка началась...";
+                        }
+                    }, 1000);
+
+                    // Переключение экрана при наличии данных
                     torrent.on('download', () => {
-                        if (torrent.progress > 0.001) { // Если скачано хотя бы чуть-чуть
+                        if (torrent.progress > 0.001) {
                             document.getElementById('status-container').style.display = 'none';
                             document.getElementById('player-container').style.display = 'block';
                         }
